@@ -60,38 +60,35 @@ class OCRService:
         ]
         logger.info("OCR Service initialized")
 
+    # Max dimension for OCR (low memory on Render ~512MB)
+    MAX_OCR_PIXELS = 1200
+
     def preprocess_image(self, image_path):
-        """Preprocess image for better OCR. Returns a dict so extract_text can iterate."""
+        """Preprocess image for OCR. Cap size to MAX_OCR_PIXELS to avoid OOM on Render."""
         try:
             img = cv2.imread(image_path)
             if img is None:
                 return None
             h, w = img.shape[:2]
-            scale = max(2000 / w, 1500 / h)
+            # Only downscale: cap longest side to MAX_OCR_PIXELS (never upscale)
+            scale = min(1.0, self.MAX_OCR_PIXELS / max(w, h))
             new_w, new_h = int(w * scale), int(h * scale)
-            img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+            if (new_w, new_h) != (w, h):
+                img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
             enhanced = clahe.apply(gray)
-            kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
-            sharpened = cv2.filter2D(enhanced, -1, kernel)
-            denoised = cv2.fastNlMeansDenoising(sharpened, None, 10, 7, 21)
-            _, thresh1 = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            thresh2 = cv2.adaptiveThreshold(
-                denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 5
-            )
-            text1 = pytesseract.image_to_string(thresh1)
-            text2 = pytesseract.image_to_string(thresh2)
-            best = thresh1 if len(text1) >= len(text2) else thresh2
-            return {'preprocessed': best}
+            denoised = cv2.fastNlMeansDenoising(enhanced, None, 8, 7, 21)
+            _, thresh = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            return {'preprocessed': thresh}
         except Exception as e:
             logger.error("Preprocessing error: %s", e)
             return None
 
-    def _get_tesseract_confidence(self, pil_img, psm=6):
+    def _get_tesseract_confidence(self, pil_img, psm=6, timeout=30):
         """Get average word confidence (0-100) from Tesseract image_to_data."""
         try:
-            data = pytesseract.image_to_data(pil_img, config=f'--psm {psm}')
+            data = pytesseract.image_to_data(pil_img, config=f'--psm {psm}', timeout=timeout)
             confidences = []
             for line in data.splitlines()[1:]:
                 parts = line.split()
@@ -107,13 +104,19 @@ class OCRService:
             return 0.0
 
     def extract_text(self, image_path):
-        """Extract text and return success, text, length, and avg_confidence (0-100)."""
+        """Extract text; cap memory with smaller images and fewer Tesseract runs."""
+        # Timeout for Tesseract subprocess (avoid hanging on Render)
+        tesseract_timeout = 60
         try:
             preprocessed = self.preprocess_image(image_path)
 
             if preprocessed is None:
                 img = Image.open(image_path).convert('RGB')
-                text = pytesseract.image_to_string(img)
+                w, h = img.size
+                if max(w, h) > self.MAX_OCR_PIXELS:
+                    ratio = self.MAX_OCR_PIXELS / max(w, h)
+                    img = img.resize((int(w * ratio), int(h * ratio)), Image.Resampling.LANCZOS)
+                text = pytesseract.image_to_string(img, timeout=tesseract_timeout)
                 avg_conf = self._get_tesseract_confidence(img)
                 text_clean = re.sub(r'\s+', ' ', text).strip()
                 return {
@@ -128,11 +131,13 @@ class OCRService:
             best_len = 0
             best_conf = 0.0
             best_pil = None
-
+            # Use only 2 PSM modes to cut memory and CPU on Render
             for method_name, processed_img in preprocessed.items():
                 pil_img = Image.fromarray(processed_img)
-                for psm in [6, 3, 12, 13]:
-                    text = pytesseract.image_to_string(pil_img, config=f'--psm {psm}')
+                for psm in [6, 3]:
+                    text = pytesseract.image_to_string(
+                        pil_img, config=f'--psm {psm}', timeout=tesseract_timeout
+                    )
                     text_clean = re.sub(r'\s+', ' ', text).strip()
                     if len(text_clean) > best_len:
                         best_len = len(text_clean)
@@ -145,7 +150,7 @@ class OCRService:
             if not best_text and preprocessed:
                 single = list(preprocessed.values())[0]
                 pil_img = Image.fromarray(single)
-                best_text = pytesseract.image_to_string(pil_img)
+                best_text = pytesseract.image_to_string(pil_img, timeout=tesseract_timeout)
                 best_text = re.sub(r'\s+', ' ', best_text).strip()
                 best_len = len(best_text)
                 best_conf = self._get_tesseract_confidence(pil_img)

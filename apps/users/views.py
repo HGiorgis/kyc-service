@@ -339,6 +339,10 @@ def test_kyc_view(request):
                     VerificationLog.objects.create(submission=submission, action=log_action, performed_by='system', details=result)
                     _log_test_page_call(request, api_key, 200, time.time() - start_time)
                     messages.success(request, 'Test run completed. See results below.')
+                except MemoryError:
+                    messages.error(request, 'Server ran out of memory. Please use smaller images (under 2MB each) and try again.')
+                    result = {'status': 'error', 'flags': ['Out of memory'], 'overall_confidence': 0}
+                    _log_test_page_call(request, api_key, 503, time.time() - start_time)
                 except Exception as e:
                     messages.error(request, f'Test failed: {str(e)}')
                     result = {'status': 'error', 'flags': [str(e)], 'overall_confidence': 0}

@@ -171,6 +171,18 @@ class KYCSubmitView(APIView):
                 'message': f'KYC verification {submission.status}'
             }, status=status.HTTP_201_CREATED)
 
+        except MemoryError:
+            _log_api_call(request, api_key, endpoint, 'POST', 503, time.time() - start_time)
+            return Response({
+                'error': 'Server ran out of memory. Please try again with smaller images (e.g. under 2MB each).',
+                'code': 'out_of_memory',
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except (SystemExit, OSError) as e:
+            _log_api_call(request, api_key, endpoint, 'POST', 503, time.time() - start_time)
+            return Response({
+                'error': 'Verification could not complete. Please retry with smaller images.',
+                'code': 'service_unavailable',
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         except Exception as e:
             import traceback
             traceback.print_exc()

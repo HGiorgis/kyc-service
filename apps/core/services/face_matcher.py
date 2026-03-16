@@ -7,14 +7,24 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 class FaceMatcher:
-    """Real face matching using face_recognition library"""
-    
+    """Real face matching using face_recognition library."""
+    # Max dimension for face images (reduce RAM on Render ~512MB)
+    MAX_FACE_PIXELS = 800
+
     def __init__(self, tolerance=0.6):
-        """
-        Initialize face matcher
-        tolerance: Lower = stricter matching (0.6 is default)
-        """
         self.tolerance = tolerance
+
+    def _load_image_small(self, image_path):
+        """Load image and resize to max MAX_FACE_PIXELS to save memory."""
+        img = cv2.imread(image_path)
+        if img is None:
+            return None
+        h, w = img.shape[:2]
+        scale = min(1.0, self.MAX_FACE_PIXELS / max(w, h))
+        if scale < 1.0:
+            new_w, new_h = int(w * scale), int(h * scale)
+            img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     
     def compare_faces(self, id_image_path, selfie_image_path):
         """
@@ -22,9 +32,15 @@ class FaceMatcher:
         Returns: dict with score and details
         """
         try:
-            # Load images
-            id_image = face_recognition.load_image_file(id_image_path)
-            selfie_image = face_recognition.load_image_file(selfie_image_path)
+            id_image = self._load_image_small(id_image_path)
+            selfie_image = self._load_image_small(selfie_image_path)
+            if id_image is None or selfie_image is None:
+                return {
+                    'score': 0.0,
+                    'match': False,
+                    'face_detected': False,
+                    'message': 'Failed to load image'
+                }
             
             # Get face encodings
             id_face_encodings = face_recognition.face_encodings(id_image)
@@ -106,11 +122,11 @@ class FaceMatcher:
             }
     
     def extract_face_quality(self, image_path):
-        """
-        Extract face quality metrics
-        """
+        """Extract face quality metrics (uses resized image to save memory)."""
         try:
-            image = face_recognition.load_image_file(image_path)
+            image = self._load_image_small(image_path)
+            if image is None:
+                return {'face_present': False, 'quality_score': 0.0}
             face_locations = face_recognition.face_locations(image)
             
             if not face_locations:
