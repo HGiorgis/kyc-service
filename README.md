@@ -77,7 +77,7 @@ Open **http://127.0.0.1:8000/** (landing). Log in at **http://127.0.0.1:8000/aut
 
 ## Docker setup
 
-Uses Linux containers: Tesseract, dlib, and face-recognition are built inside the image. The `dlib/` folder (Windows wheels) is ignored in Docker.
+Uses Linux containers: Tesseract, dlib, and face-recognition are built inside the image. The `dlib/` folder (Windows wheels) is ignored in Docker. The Dockerfile limits build parallelism so the dlib compile stays under ~2GB RAM; the first build may take 15–30 minutes.
 
 ### Build and run
 

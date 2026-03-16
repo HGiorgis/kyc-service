@@ -28,6 +28,10 @@ WORKDIR /app
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir "setuptools==70.2.0" wheel
 
+# Limit parallel build jobs so dlib compile stays under ~2GB RAM (avoids 8GB+ OOM)
+ENV CMAKE_BUILD_PARALLEL_LEVEL=1
+ENV MAKEFLAGS=-j1
+
 COPY requirements-docker.txt .
 RUN pip install --no-cache-dir -r requirements-docker.txt
 
