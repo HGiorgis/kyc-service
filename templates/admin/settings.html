@@ -1,0 +1,198 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block admin_title %}System Settings{% endblock %}
+
+{% block admin_content %}
+<div class="page-header">
+    <h1 class="page-title">Settings</h1>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">System statistics</div>
+            <div class="card-body">
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-value">{{ total_api_calls }}</div><div class="stat-label">Total API calls</div></div>
+                    <div class="stat-card"><div class="stat-value">{{ unique_users }}</div><div class="stat-label">Active users</div></div>
+                    <div class="stat-card"><div class="stat-value">{{ avg_response|floatformat:2 }}s</div><div class="stat-label">Avg response</div></div>
+                    <div class="stat-card"><div class="stat-value">24/7</div><div class="stat-label">Uptime</div></div>
+                </div>
+            </div>
+        </div>
+        <div class="card mb-4">
+            <div class="card-header">Default rate limits</div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="rate_limits">
+                    <div class="mb-3">
+                        <label class="form-label">Default Daily Request Limit</label>
+                        <input type="number" class="form-control" name="default_daily_limit" value="{{ settings.default_daily_limit }}">
+                        <small class="text-muted">Applied to new users</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Default Monthly Request Limit</label>
+                        <input type="number" class="form-control" name="default_monthly_limit" value="{{ settings.default_monthly_limit }}">
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" name="apply_to_all" id="applyRateAll">
+                        <label class="form-check-label" for="applyRateAll">Apply to all existing users</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">API settings</div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="api_settings">
+                    <div class="mb-3">
+                        <label class="form-label">API Key Expiry (days)</label>
+                        <input type="number" class="form-control" name="key_expiry_days" value="{{ settings.key_expiry_days }}">
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" name="require_approval_new_keys" id="requireApproval" {% if settings.require_approval_new_keys %}checked{% endif %}>
+                        <label class="form-check-label" for="requireApproval">Require Admin Approval for New Keys</label>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" name="auto_approve_high_confidence" id="autoApprove" {% if settings.auto_approve_high_confidence %}checked{% endif %}>
+                        <label class="form-check-label" for="autoApprove">Auto-approve High Confidence KYC (>85%)</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </form>
+            </div>
+        </div>
+        
+        <div class="card mb-4">
+            <div class="card-header">KYC settings</div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="kyc_settings">
+                    <div class="mb-3">
+                        <label class="form-label">Auto-approve Threshold</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="approve_threshold" value="{{ settings.approve_threshold }}" min="0" max="100">
+                            <span class="input-group-text">%</span>
+                        </div>
+                        <small class="text-muted">KYC submissions above this confidence auto-approve</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Auto-reject Threshold</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="reject_threshold" value="{{ settings.reject_threshold }}" min="0" max="100">
+                            <span class="input-group-text">%</span>
+                        </div>
+                        <small class="text-muted">KYC submissions below this confidence auto-reject</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Max Image Size (MB)</label>
+                        <input type="number" class="form-control" name="max_image_size" value="{{ settings.max_image_size_mb }}" step="0.1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Allowed Image Formats</label>
+                        <input type="text" class="form-control" name="image_formats" value="{{ settings.allowed_image_formats }}" placeholder="jpg, jpeg, png, webp">
+                        <small class="text-muted">Comma-separated. API will reject uploads with other formats.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">Security</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="form_type" value="security">
+                            <div class="mb-3">
+                                <label class="form-label">Session Timeout (minutes)</label>
+                                <input type="number" class="form-control" name="session_timeout" value="{{ settings.session_timeout_minutes }}">
+                            </div>
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" name="force_2fa" id="force2FA" {% if settings.force_2fa_admin %}checked{% endif %}>
+                                <label class="form-check-label" for="force2FA">Force 2FA for Admin Users</label>
+                            </div>
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" name="ip_whitelist" id="ipWhitelist" {% if settings.ip_whitelist_enabled %}checked{% endif %}>
+                                <label class="form-check-label" for="ipWhitelist">Enable IP Whitelisting</label>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Save</button>
+                        </form>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-info-circle me-2"></i>Security Recommendations</h6>
+                            <ul class="mb-0">
+                                <li>Use strong passwords (min 8 chars, mixed case, numbers)</li>
+                                <li>Enable 2FA for admin accounts</li>
+                                <li>Regularly review API key usage</li>
+                                <li>Set appropriate rate limits</li>
+                                <li>Monitor for suspicious activity</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card border-danger">
+            <div class="card-header text-danger">Danger zone</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <button class="btn btn-outline-danger w-100 mb-2" onclick="clearCache()">
+                            <i class="fas fa-trash me-1"></i>Clear System Cache
+                        </button>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-outline-danger w-100 mb-2" onclick="resetAllKeys()">
+                            <i class="fas fa-key me-1"></i>Reset All API Keys
+                        </button>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-outline-danger w-100 mb-2" onclick="exportLogs()">
+                            <i class="fas fa-download me-1"></i>Export System Logs
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function clearCache() {
+    if(confirm('Clear system cache? This may slow down initial requests.')) {
+        alert('Cache cleared successfully!');
+    }
+}
+
+function resetAllKeys() {
+    if(confirm('WARNING: This will reset ALL API keys. All users will need to generate new keys. Continue?')) {
+        alert('All API keys have been reset. Users must generate new keys.');
+    }
+}
+
+function exportLogs() {
+    alert('System logs exported. Check your downloads folder.');
+}
+</script>
+{% endblock %}

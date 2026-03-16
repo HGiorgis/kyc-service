@@ -1,0 +1,22 @@
+Django
+djangorestframework
+python-dotenv
+pillow
+django-cors-headers
+
+# Add these to existing requirements
+djangorestframework-api-key
+django-crispy-forms
+crispy-bootstrap5
+opencv-python
+numpy
+celery
+redis
+django-celery-results
+django-celery-beat
+pdf2image
+pytesseract
+psycopg2-binary
+face-recognition
+setuptools==70.0.1
+whitenoise

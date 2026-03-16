@@ -1,0 +1,36 @@
+# Python
+venv
+.venv
+__pycache__
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+.env
+.venv
+env/
+
+# Git / IDE
+.git
+.gitignore
+.cursor
+.vscode
+*.md
+
+# Local / test
+*.sqlite3
+*.log
+media/
+staticfiles/
+.pytest_cache
+.coverage
+htmlcov/
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Windows-only dlib wheels (Linux builds dlib from source via pip)
+dlib/

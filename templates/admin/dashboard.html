@@ -1,0 +1,98 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block admin_title %}Dashboard{% endblock %}
+
+{% block admin_content %}
+<div class="page-header">
+    <h1 class="page-title">Dashboard</h1>
+    <span class="badge bg-secondary">Admin: {{ user.username }}</span>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ total_submissions }}</div>
+        <div class="stat-label">Total submissions</div>
+        <div class="stat-meta">+{{ today_submissions }} today</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ pending_count }}</div>
+        <div class="stat-label">Pending review</div>
+        <div class="stat-meta">{{ flagged_count }} flagged</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ approved_count }}</div>
+        <div class="stat-label">Approved</div>
+        <div class="stat-meta">+{{ approved_today }} today</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ total_users }}</div>
+        <div class="stat-label">Total users</div>
+        <div class="stat-meta">{{ active_keys }} active API keys</div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">Quick actions</div>
+    <div class="card-body">
+        <a href="{% url 'admin:kyc-list' %}?status=pending" class="btn btn-outline-secondary me-2">
+            <i class="fas fa-clock me-1"></i>Pending ({{ pending_count }})
+        </a>
+        <a href="{% url 'admin:kyc-list' %}?status=flagged" class="btn btn-outline-secondary me-2">
+            <i class="fas fa-flag me-1"></i>Flagged ({{ flagged_count }})
+        </a>
+        <a href="{% url 'admin:users' %}" class="btn btn-primary">
+            <i class="fas fa-users me-1"></i>Manage users
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Recent KYC Submissions</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>ID Type</th>
+                        <th>Status</th>
+                        <th>Confidence</th>
+                        <th>Submitted</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sub in recent_submissions %}
+                    <tr>
+                        <td>
+                            <strong>{{ sub.user_full_name }}</strong><br>
+                            <small class="text-muted">{{ sub.user_email }}</small>
+                        </td>
+                        <td>{{ sub.get_id_type_display }}</td>
+                        <td>
+                            <span class="status-badge status-{{ sub.status }}">{{ sub.get_status_display }}</span>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="progress flex-grow-1" style="height: 6px; width: 60px;">
+                                    <div class="progress-bar {% if sub.confidence_score > 0.7 %}bg-success{% elif sub.confidence_score > 0.4 %}bg-warning{% else %}bg-danger{% endif %}" style="width: {% widthratio sub.confidence_score 1 100 %}%"></div>
+                                </div>
+                                <small>{{ sub.confidence_score|floatformat:2 }}</small>
+                            </div>
+                        </td>
+                        <td>{{ sub.created_at|timesince }} ago</td>
+                        <td>
+                            <a href="{% url 'admin:kyc-review' sub.id %}" class="btn btn-sm btn-outline-primary">Review</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">No submissions yet</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

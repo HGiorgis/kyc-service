@@ -1,0 +1,28 @@
+# Docker: setuptools 70.x for dlib build; cmake from system (apt), not pip
+setuptools==70.2.0
+wheel
+
+Django>=4.2
+djangorestframework
+python-dotenv
+Pillow
+django-cors-headers
+djangorestframework-api-key
+django-crispy-forms
+crispy-bootstrap5
+opencv-python-headless
+numpy
+gunicorn
+whitenoise
+pdf2image
+pytesseract
+psycopg2-binary
+# dlib builds from source on Linux (needs cmake + build-essential in Dockerfile)
+# face-recognition depends on dlib
+face-recognition
+
+# Optional: celery/redis if you enable them
+# celery
+# redis
+# django-celery-results
+# django-celery-beat

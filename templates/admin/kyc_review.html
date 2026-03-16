@@ -1,0 +1,126 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block admin_title %}Review KYC{% endblock %}
+
+{% block admin_content %}
+<div class="page-header">
+    <h1 class="page-title">Review KYC submission</h1>
+    <a href="{% url 'admin:kyc-list' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i>Back to list
+    </a>
+</div>
+
+<div class="kyc-review-layout">
+    <div class="row">
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header">Applicant</div>
+                <div class="card-body">
+                    <table class="info-table">
+                        <tr><th>Name</th><td>{{ submission.user_full_name }}</td></tr>
+                        <tr><th>Email</th><td>{{ submission.user_email }}</td></tr>
+                        <tr><th>User ID</th><td><code class="small">{{ submission.user_id }}</code></td></tr>
+                        <tr><th>ID type</th><td>{{ submission.get_id_type_display }}</td></tr>
+                        <tr><th>ID number</th><td>{{ submission.id_number }}</td></tr>
+                        <tr><th>Submitted</th><td>{{ submission.created_at|date:"M j, Y H:i" }}</td></tr>
+                        <tr><th>Status</th><td><span class="status-badge status-{{ submission.status }}">{{ submission.get_status_display }}</span></td></tr>
+                        <tr><th>Confidence</th>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height: 6px; width: 80px;">
+                                        <div class="progress-bar {% if submission.confidence_score > 0.7 %}bg-success{% elif submission.confidence_score > 0.4 %}bg-warning{% else %}bg-danger{% endif %}" style="width: {% widthratio submission.confidence_score 1 100 %}%"></div>
+                                    </div>
+                                    <span class="small">{{ submission.confidence_score|floatformat:2 }}</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            {% if submission.verification_data.flags %}
+            <div class="card mb-4 border-warning">
+                <div class="card-header bg-warning text-dark">Verification flags</div>
+                <div class="card-body py-2">
+                    <ul class="list-unstyled mb-0 small">
+                        {% for flag in submission.verification_data.flags %}
+                        <li class="py-1"><i class="fas fa-exclamation-triangle text-warning me-2"></i>{{ flag }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header">Documents</div>
+                <div class="card-body">
+                    <div class="kyc-docs-grid">
+                        <div class="kyc-doc-card">
+                            <div class="doc-label">ID front</div>
+                            <div class="doc-image-wrap">
+                                {% with doc=submission.documents.all.0 %}
+                                    {% if doc %}<img src="{{ doc.file.url }}" alt="ID Front">{% else %}<span class="text-muted small">No image</span>{% endif %}
+                                {% endwith %}
+                            </div>
+                        </div>
+                        <div class="kyc-doc-card">
+                            <div class="doc-label">ID back</div>
+                            <div class="doc-image-wrap">
+                                {% with doc=submission.documents.all.1 %}
+                                    {% if doc %}<img src="{{ doc.file.url }}" alt="ID Back">{% else %}<span class="text-muted small">No image</span>{% endif %}
+                                {% endwith %}
+                            </div>
+                        </div>
+                        <div class="kyc-doc-card">
+                            <div class="doc-label">Selfie</div>
+                            <div class="doc-image-wrap">
+                                {% with doc=submission.documents.all.2 %}
+                                    {% if doc %}<img src="{{ doc.file.url }}" alt="Selfie">{% else %}<span class="text-muted small">No image</span>{% endif %}
+                                {% endwith %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-body">
+                    <p class="text-secondary small mb-3">Approve or reject this KYC submission.</p>
+                    <div class="kyc-review-actions">
+                        <form method="post" class="d-flex gap-2 flex-grow-1">
+                            {% csrf_token %}
+                            <button type="submit" name="action" value="approve" class="btn btn-success">
+                                <i class="fas fa-check me-2"></i>Approve
+                            </button>
+                            <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                                <i class="fas fa-times me-2"></i>Reject
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="rejectModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Reject submission</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">Rejection reason (required)</label>
+                    <textarea name="rejection_reason" class="form-control" rows="4" required placeholder="Explain why this submission is being rejected…"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" name="action" value="reject" class="btn btn-danger"><i class="fas fa-times me-1"></i>Reject</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

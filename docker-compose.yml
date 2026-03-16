@@ -1,0 +1,66 @@
+# KYC Hybrid Service - Docker Compose
+# Build includes: Tesseract (Linux), dlib/face_recognition, setuptools 70.x
+#
+# Usage:
+#   docker compose up -d --build    # build and run (SQLite by default)
+#   docker compose up -d web        # run only web (no db/redis)
+#
+# Optional: use host network (uncomment under web)
+#   network_mode: host
+# and remove or comment out "ports:" so the app listens on host 8000 directly.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kyc-hybrid-service:latest
+    container_name: kyc_service
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2"
+    volumes:
+      - .:/app
+      - media_volume:/app/media
+      - static_volume:/app/staticfiles
+    ports:
+      - "8000:8000"
+    # Optional: host mode (Linux) - uncomment to use host network, then remove "ports" above
+    # network_mode: host
+    environment:
+      - DEBUG=1
+      - SECRET_KEY=your-secret-key-change-in-production
+      - ALLOWED_HOSTS=*
+      # Database: default SQLite. For Postgres uncomment and use db service:
+      # - DATABASE_URL=postgres://eras_user:eras_pass@db:5432/eras_db
+    # Uncomment to use Postgres:
+    # depends_on:
+    #   - db
+    restart: unless-stopped
+
+  # Optional: Postgres (enable if you switch settings to use DATABASE_URL)
+  # db:
+  #   image: postgres:16-alpine
+  #   container_name: kyc_postgres
+  #   environment:
+  #     POSTGRES_DB: eras_db
+  #     POSTGRES_USER: eras_user
+  #     POSTGRES_PASSWORD: eras_pass
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+  # Optional: Redis (if you enable Celery later)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: kyc_redis
+  #   ports:
+  #     - "6379:6379"
+  #   restart: unless-stopped
+
+volumes:
+  media_volume:
+  static_volume:
+  # postgres_data:

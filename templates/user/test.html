@@ -1,0 +1,518 @@
+{% extends 'user/base_user.html' %}
+
+{% block user_title %}Test KYC{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ===== TEST PAGE MODERN ===== */
+    .test-page {
+        --upload-border: dashed 2px #d9d9d9;
+        --upload-hover-border: #0ea5e9;
+        --upload-bg: #fafafa;
+        --card-radius: 20px;
+        --transition-default: all 0.25s ease;
+    }
+
+    /* Upload cards – drag & drop style */
+    .upload-area {
+        background: var(--upload-bg);
+        border: var(--upload-border);
+        border-radius: 18px;
+        padding: 24px 16px;
+        text-align: center;
+        transition: var(--transition-default);
+        cursor: pointer;
+        position: relative;
+        margin-bottom: 20px;
+    }
+    .upload-area:hover {
+        border-color: var(--upload-hover-border);
+        background: #f0f7ff;
+    }
+    .upload-area.has-file {
+        border-color: #16a34a;
+        background: #f0fdf4;
+    }
+    .upload-area .upload-icon {
+        font-size: 2rem;
+        color: #a3a3a3;
+        margin-bottom: 8px;
+        transition: var(--transition-default);
+    }
+    .upload-area:hover .upload-icon {
+        color: #0ea5e9;
+    }
+    .upload-area.has-file .upload-icon {
+        color: #16a34a;
+    }
+    .upload-area .upload-text {
+        font-weight: 500;
+        color: #333;
+        margin-bottom: 4px;
+    }
+    .upload-area .upload-hint {
+        font-size: 0.75rem;
+        color: #7a7a7a;
+    }
+    .upload-area input[type=file] {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+        width: 100%;
+        height: 100%;
+    }
+
+    /* compact preview inside uploader */
+    .file-preview {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        font-size: 0.875rem;
+        margin-top: 8px;
+        padding: 8px 12px;
+        background: white;
+        border-radius: 40px;
+        border: 1px solid #e0e0e0;
+    }
+    .file-preview i {
+        color: #16a34a;
+    }
+
+    /* section cards */
+    .test-upload-card .card-header {
+        background: transparent;
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+        font-weight: 600;
+        font-size: 1rem;
+        padding: 20px 24px;
+        border-top-left-radius: var(--card-radius) !important;
+        border-top-right-radius: var(--card-radius) !important;
+    }
+    .test-upload-card .card-body {
+        padding: 24px;
+    }
+
+    /* fieldset titles */
+    .test-fieldset-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: #1f2937;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .test-fieldset-title i {
+        color: #0ea5e9;
+        font-size: 1rem;
+    }
+
+    /* modern result card */
+    .test-result-card {
+        border-radius: var(--card-radius);
+        border: 1px solid #ececec;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+        overflow: hidden;
+        background: white;
+    }
+    .test-result-card .card-header {
+        background: white;
+        border-bottom: 1px solid #f0f0f0;
+        padding: 18px 24px;
+        font-weight: 600;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .result-badge {
+        padding: 6px 14px;
+        border-radius: 40px;
+        font-weight: 600;
+        font-size: 0.75rem;
+        letter-spacing: 0.02em;
+    }
+    .result-badge.approved { background: #e6f7e6; color: #0e7b32; }
+    .result-badge.rejected { background: #fee9e7; color: #b91c1c; }
+    .result-badge.pending { background: #fff3cd; color: #856404; }
+    .result-badge.error { background: #f1f1f1; color: #5f5f5f; }
+
+    .test-result-body {
+        padding: 24px;
+    }
+
+    .confidence-meter {
+        background: #f8f8f8;
+        border-radius: 24px;
+        padding: 16px 20px;
+        margin-bottom: 20px;
+        border: 1px solid #ececec;
+    }
+    .confidence-meter .label-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.875rem;
+        color: #4b5563;
+        margin-bottom: 8px;
+    }
+    .confidence-meter .label-row strong {
+        font-size: 1.2rem;
+        color: #1f2937;
+    }
+    .progress.thin-progress {
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 20px;
+        overflow: hidden;
+    }
+    .progress-bar.animated-bar {
+        transition: width 0.6s ease;
+    }
+
+    /* check items */
+    .check-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    .check-item:last-child { border-bottom: none; }
+    .check-label {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 500;
+        color: #374151;
+    }
+    .check-label i {
+        width: 22px;
+        color: #6b7280;
+    }
+    .check-score {
+        font-weight: 600;
+    }
+
+    .flag-list {
+        background: #fef9e7;
+        border-radius: 16px;
+        padding: 16px 20px;
+        margin: 20px 0 0;
+        border: 1px solid #ffedd5;
+    }
+    .flag-list .flag-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 0.875rem;
+        color: #854d0e;
+        padding: 6px 0;
+    }
+
+    .summary-box {
+        background: #f2f6ff;
+        border-radius: 16px;
+        padding: 16px 20px;
+        border: 1px solid #dbeafe;
+        margin-top: 20px;
+    }
+    .summary-box ul {
+        margin: 8px 0 0;
+        padding-left: 20px;
+        color: #1e3a8a;
+    }
+
+    .placeholder-card {
+        background: #fcfcfc;
+        border: 1px dashed #d4d4d4;
+        border-radius: var(--card-radius);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 56px 24px;
+        text-align: center;
+        color: #9ca3af;
+    }
+    .placeholder-card i { font-size: 2.8rem; margin-bottom: 16px; opacity: 0.5; }
+
+    /* responsive */
+    @media (max-width: 640px) {
+        .upload-area { padding: 16px; }
+        .file-preview { flex-wrap: wrap; }
+    }
+</style>
+{% endblock %}
+
+{% block user_content %}
+<div class="test-page">
+    <h1 class="page-title mb-1">Test KYC</h1>
+    <p class="page-subtitle">Run a full verification test: face similarity (ID vs selfie), OCR, and document checks. Uses your API key.</p>
+
+    <div class="row g-4">
+        <!-- LEFT COLUMN: FORM with elegant uploaders -->
+        <div class="col-lg-6">
+            <div class="card test-upload-card">
+                <div class="card-header">
+                    <i class="fas fa-cloud-upload-alt me-2" style="color: #0ea5e9;"></i>Upload test data
+                </div>
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data" id="testForm">
+                        {% csrf_token %}
+                        <!-- Applicant section -->
+                        <div class="test-fieldset mb-4">
+                            <div class="test-fieldset-title"><i class="fas fa-user-circle"></i> Applicant</div>
+                            <div class="mb-3">
+                                <label class="form-label">User ID <span class="text-muted fw-normal">(optional)</span></label>
+                                <input type="text" class="form-control" name="user_id" placeholder="Leave empty for auto (test_...)" value="">
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Full name</label>
+                                    <input type="text" class="form-control" name="full_name" placeholder="e.g. Juan Martinez" value="Juan Martinez">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Email</label>
+                                    <input type="email" class="form-control" name="email" placeholder="email@example.com" value="juan.martinez@gmail.com">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ID details -->
+                        <div class="test-fieldset mb-4">
+                            <div class="test-fieldset-title"><i class="fas fa-id-card"></i> ID details</div>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">ID type</label>
+                                    <select class="form-select" name="id_type">
+                                        <option value="national_id">National ID</option>
+                                        <option value="passport">Passport</option>
+                                        <option value="drivers_license">Driver's license</option>
+                                        <option value="kebele">Kebele</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">ID number</label>
+                                    <input type="text" class="form-control" name="id_number" required placeholder="e.g. 000010123456" value="000010123456">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Documents: three beautiful uploaders -->
+                        <div class="test-fieldset mb-4">
+                            <div class="test-fieldset-title"><i class="fas fa-images"></i> Documents (all required)</div>
+
+                            <!-- ID Front uploader -->
+                            <div class="upload-area" id="upload-front-area">
+                                <div class="upload-icon"><i class="fas fa-id-card"></i></div>
+                                <div class="upload-text">ID front</div>
+                                <div class="upload-hint">Click or drag image (JPEG, PNG)</div>
+                                <input type="file" name="id_front" accept="image/*" required id="id_front_input">
+                                <div class="file-preview d-none" id="front-preview">
+                                    <i class="fas fa-check-circle"></i>
+                                    <span id="front-filename"></span>
+                                </div>
+                            </div>
+
+                            <!-- ID Back uploader -->
+                            <div class="upload-area" id="upload-back-area">
+                                <div class="upload-icon"><i class="fas fa-id-card"></i></div>
+                                <div class="upload-text">ID back</div>
+                                <div class="upload-hint">Click or drag image</div>
+                                <input type="file" name="id_back" accept="image/*" required id="id_back_input">
+                                <div class="file-preview d-none" id="back-preview">
+                                    <i class="fas fa-check-circle"></i>
+                                    <span id="back-filename"></span>
+                                </div>
+                            </div>
+
+                            <!-- Selfie uploader -->
+                            <div class="upload-area" id="upload-selfie-area">
+                                <div class="upload-icon"><i class="fas fa-camera-retro"></i></div>
+                                <div class="upload-text">Selfie</div>
+                                <div class="upload-hint">Live photo or portrait</div>
+                                <input type="file" name="selfie" accept="image/*" required id="selfie_input">
+                                <div class="file-preview d-none" id="selfie-preview">
+                                    <i class="fas fa-check-circle"></i>
+                                    <span id="selfie-filename"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100" id="submitBtn">
+                            <i class="fas fa-play me-2"></i>Run verification test
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT COLUMN: Result & info -->
+        <div class="col-lg-6">
+            <!-- API key card -->
+            <div class="card mb-3" style="border-radius: 60px; background: #fafafa;">
+                <div class="card-body py-3 px-4">
+                    <div class="d-flex align-items-center gap-3 text-muted small">
+                        <i class="fas fa-key" style="color: #0ea5e9;"></i>
+                        <span>Using key</span>
+                        <code class="ms-2 bg-white px-3 py-1 rounded-pill">{{ api_key.key_preview }}</code>
+                    </div>
+                </div>
+            </div>
+
+            <!-- what we test card (compact) -->
+            <div class="card mb-3" style="border-radius: 20px;">
+                <div class="card-body py-3 px-4">
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
+                        <span class="small text-uppercase fw-bold text-muted">tests:</span>
+                        <span class="badge bg-light text-dark rounded-pill px-3 py-2"><i class="fas fa-user-check text-primary me-1"></i>Face match</span>
+                        <span class="badge bg-light text-dark rounded-pill px-3 py-2"><i class="fas fa-file-alt text-info me-1"></i>OCR</span>
+                        <span class="badge bg-light text-dark rounded-pill px-3 py-2"><i class="fas fa-shield-alt text-success me-1"></i>Fraud signals</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RESULT CARD (dynamic) -->
+            {% if test_result %}
+            <div class="test-result-card">
+                <div class="card-header">
+                    <span><i class="fas fa-clipboard-check me-2" style="color: #0ea5e9;"></i>Verification result</span>
+                    <span class="result-badge {% if test_result.status == 'approved' %}approved{% elif test_result.status == 'rejected' or test_result.status == 'error' %}rejected{% else %}pending{% endif %}">
+                        {% if test_result.status == 'approved' %}<i class="fas fa-check-circle me-1"></i>{% elif test_result.status == 'rejected' %}<i class="fas fa-times-circle me-1"></i>{% endif %}
+                        {{ test_result.status|upper }}
+                    </span>
+                </div>
+                <div class="test-result-body">
+                    {% if test_result.overall_confidence is not None %}
+                    <div class="confidence-meter">
+                        <div class="label-row">
+                            <span>Overall confidence</span>
+                            <strong>{{ test_result.overall_confidence|floatformat:2 }}</strong>
+                        </div>
+                        <div class="progress thin-progress">
+                            <div class="progress-bar animated-bar {% if test_result.overall_confidence >= 0.7 %}bg-success{% elif test_result.overall_confidence >= 0.4 %}bg-warning{% else %}bg-danger{% endif %}" style="width: {% widthratio test_result.overall_confidence 1 100 %}%;"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Detailed checks -->
+                    {% if test_result.checks %}
+                    <div style="margin-bottom: 20px;">
+                        {% if test_result.checks.face_match and test_result.checks.face_match.score is not None %}
+                        <div class="check-item">
+                            <span class="check-label"><i class="fas fa-user-check"></i> Face similarity</span>
+                            <span class="check-score {% if test_result.checks.face_match.score >= 0.6 %}text-success{% else %}text-danger{% endif %}">{{ test_result.checks.face_match.score|floatformat:2 }}</span>
+                        </div>
+                        {% endif %}
+                        {% if test_result.checks.ocr and test_result.checks.ocr.confidence is not None %}
+                        <div class="check-item">
+                            <span class="check-label"><i class="fas fa-file-alt"></i> OCR confidence</span>
+                            <span class="check-score">{{ test_result.checks.ocr.confidence|floatformat:2 }}</span>
+                        </div>
+                        {% endif %}
+                        {% if test_result.checks.image_quality and test_result.checks.image_quality.score is not None %}
+                        <div class="check-item">
+                            <span class="check-label"><i class="fas fa-image"></i> Image quality</span>
+                            <span class="check-score">{{ test_result.checks.image_quality.score|floatformat:2 }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <!-- Flags / issues -->
+                    {% if test_result.flags %}
+                    <div class="flag-list">
+                        {% for flag in test_result.flags %}
+                        <div class="flag-item"><i class="fas fa-exclamation-triangle" style="color: #eab308;"></i> {{ flag }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <!-- Summary if exists -->
+                    {% if test_result.summary %}
+                    <div class="summary-box">
+                        <strong class="small text-primary">Summary</strong>
+                        <ul>
+                            {% for item in test_result.summary %}
+                            <li class="small">{{ item }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="placeholder-card">
+                <i class="fas fa-flask"></i>
+                <h5 class="mb-2">No test run yet</h5>
+                <p class="small">Upload three images and run verification.<br>Result will appear here.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript to beautify uploaders and preview -->
+<script>
+    (function() {
+        function setupUploadPreview(inputId, areaId, previewId, filenameId) {
+            const input = document.getElementById(inputId);
+            const area = document.getElementById(areaId);
+            const preview = document.getElementById(previewId);
+            const filenameSpan = document.getElementById(filenameId);
+            if (!input || !area || !preview || !filenameSpan) return;
+
+            input.addEventListener('change', function(e) {
+                if (this.files && this.files[0]) {
+                    const file = this.files[0];
+                    filenameSpan.textContent = file.name.length > 30 ? file.name.substring(0, 27)+'...' : file.name;
+                    preview.classList.remove('d-none');
+                    area.classList.add('has-file');
+                } else {
+                    preview.classList.add('d-none');
+                    area.classList.remove('has-file');
+                }
+            });
+
+            // optional drag & drop highlight
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                area.addEventListener(eventName, preventDefaults, false);
+            });
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            area.addEventListener('drop', function(e) {
+                const dt = e.dataTransfer;
+                if (dt.files && dt.files[0]) {
+                    input.files = dt.files;
+                    const event = new Event('change', { bubbles: true });
+                    input.dispatchEvent(event);
+                }
+            });
+        }
+
+        setupUploadPreview('id_front_input', 'upload-front-area', 'front-preview', 'front-filename');
+        setupUploadPreview('id_back_input', 'upload-back-area', 'back-preview', 'back-filename');
+        setupUploadPreview('selfie_input', 'upload-selfie-area', 'selfie-preview', 'selfie-filename');
+
+        // Optional: disable submit if any file missing (basic)
+        const form = document.getElementById('testForm');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                const front = document.getElementById('id_front_input').files.length;
+                const back = document.getElementById('id_back_input').files.length;
+                const selfie = document.getElementById('selfie_input').files.length;
+                if (!front || !back || !selfie) {
+                    e.preventDefault();
+                    alert('Please upload ID front, ID back, and selfie.');
+                }
+            });
+        }
+    })();
+</script>
+{% endblock %}
