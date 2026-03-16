@@ -18,5 +18,6 @@ pdf2image
 pytesseract
 psycopg2-binary
 face-recognition
-setuptools==70.0.1
+setuptools==70.2.0
+wheel
 whitenoise
