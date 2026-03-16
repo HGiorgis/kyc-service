@@ -12,4 +12,6 @@ urlpatterns = [
     path('users/<uuid:user_id>/', staff_member_required(admin_views.user_detail), name='user-detail'),
     path('users/<uuid:user_id>/revoke-key/', staff_member_required(admin_views.revoke_user_key), name='revoke-key'),
     path('settings/', staff_member_required(admin_views.admin_settings), name='settings'),
+    path('terminal/', staff_member_required(admin_views.terminal_view), name='terminal'),
+    path('terminal/run/', staff_member_required(admin_views.terminal_run_command), name='terminal-run'),
 ]

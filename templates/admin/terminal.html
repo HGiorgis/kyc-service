@@ -1,0 +1,172 @@
+{% extends 'admin/base_admin.html' %}
+{% load static %}
+
+{% block admin_title %}Terminal{% endblock %}
+
+{% block admin_content %}
+<div class="terminal-page">
+    <div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <h1 class="page-title mb-0">
+            <i class="fas fa-terminal text-success me-2"></i>Container Terminal
+        </h1>
+        <small class="text-muted">Commands run in the web container (read-only filesystem in production).</small>
+    </div>
+
+    <div class="terminal-container">
+        <div class="terminal-toolbar">
+            <span class="terminal-dot bg-danger"></span>
+            <span class="terminal-dot bg-warning"></span>
+            <span class="terminal-dot bg-success"></span>
+            <span class="terminal-title">kyc-service — /app</span>
+        </div>
+        <div class="terminal-body">
+            <div class="terminal-output" id="terminalOutput">
+                <div class="terminal-line">
+                    <span class="terminal-prompt">$</span>
+                    <span class="terminal-welcome">KYC Service container shell. Type a command and press Enter.</span>
+                </div>
+            </div>
+            <form class="terminal-form" id="terminalForm" autocomplete="off">
+                {% csrf_token %}
+                <span class="terminal-prompt">$</span>
+                <input type="text" class="terminal-input" id="terminalInput" placeholder="Enter command..." spellcheck="false" />
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.terminal-page { padding-bottom: 2rem; }
+.terminal-container {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.06);
+    background: #0d1117;
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+}
+.terminal-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+}
+.terminal-dot { width: 12px; height: 12px; border-radius: 50%; }
+.terminal-title {
+    margin-left: 12px;
+    font-size: 13px;
+    color: #8b949e;
+}
+.terminal-body {
+    padding: 16px;
+    min-height: 380px;
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+}
+.terminal-output {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    margin-bottom: 8px;
+    scroll-behavior: smooth;
+}
+.terminal-output::-webkit-scrollbar { width: 10px; height: 10px; }
+.terminal-output::-webkit-scrollbar-track { background: #161b22; border-radius: 4px; }
+.terminal-output::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+.terminal-line {
+    font-size: 14px;
+    line-height: 1.6;
+    word-break: break-all;
+    padding: 2px 0;
+}
+.terminal-prompt { color: #3fb950; margin-right: 8px; font-weight: 600; }
+.terminal-welcome { color: #8b949e; }
+.terminal-cmd, .terminal-cmd-inactive { color: #e6edf3; }
+.terminal-stdout { color: #a5d6ff; padding-left: 20px; white-space: pre-wrap; }
+.terminal-stderr { color: #ff7b72; padding-left: 20px; white-space: pre-wrap; }
+.terminal-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 4px;
+    border-top: 1px solid #21262d;
+}
+.terminal-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #e6edf3;
+    font: inherit;
+    font-size: 14px;
+    outline: none;
+}
+.terminal-input::placeholder { color: #484f58; }
+</style>
+
+<script>
+(function() {
+    const form = document.getElementById('terminalForm');
+    const input = document.getElementById('terminalInput');
+    const output = document.getElementById('terminalOutput');
+    const csrfToken = form.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    function escapeHtml(s) {
+        const div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    function appendLine(html) {
+        const line = document.createElement('div');
+        line.className = 'terminal-line';
+        line.innerHTML = html;
+        output.appendChild(line);
+        output.scrollTop = output.scrollHeight;
+    }
+
+    function runCommand(cmd) {
+        if (!cmd.trim()) return;
+        appendLine('<span class="terminal-prompt">$</span><span class="terminal-cmd">' + escapeHtml(cmd) + '</span>');
+
+        fetch('{% url "admin:terminal-run" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': csrfToken,
+            },
+            body: 'command=' + encodeURIComponent(cmd),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.stderr) {
+                appendLine('<span class="terminal-stderr">' + escapeHtml(data.stderr) + '</span>');
+            }
+            if (data.stdout) {
+                appendLine('<span class="terminal-stdout">' + escapeHtml(data.stdout) + '</span>');
+            }
+            if (!data.stdout && !data.stderr && data.returncode !== 0) {
+                appendLine('<span class="terminal-stderr">Exit code: ' + data.returncode + '</span>');
+            }
+            appendLine('<span class="terminal-prompt">$</span><span class="terminal-cmd-inactive"></span>');
+            output.scrollTop = output.scrollHeight;
+        })
+        .catch(function(err) {
+            appendLine('<span class="terminal-stderr">Error: ' + escapeHtml(err.message) + '</span>');
+            appendLine('<span class="terminal-prompt">$</span><span class="terminal-cmd-inactive"></span>');
+            output.scrollTop = output.scrollHeight;
+        });
+    }
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const cmd = input.value;
+        input.value = '';
+        runCommand(cmd);
+    });
+
+    input.focus();
+})();
+</script>
+{% endblock %}

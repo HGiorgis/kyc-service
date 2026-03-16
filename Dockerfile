@@ -44,5 +44,5 @@ RUN python manage.py migrate --noinput
 RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
-# --timeout 120: KYC/face recognition can take >30s; avoid WORKER TIMEOUT
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]
+# Migrate, create default admin (admin / admin@kyc.local), then gunicorn
+CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py create_default_admin --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120"]

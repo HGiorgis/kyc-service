@@ -20,6 +20,9 @@
             <a href="{% url 'admin:settings' %}" class="nav-link {% if request.resolver_match.url_name == 'settings' %}active{% endif %}">
                 <i class="fas fa-cog"></i>Settings
             </a>
+            <a href="{% url 'admin:terminal' %}" class="nav-link {% if request.resolver_match.url_name == 'terminal' %}active{% endif %}">
+                <i class="fas fa-terminal"></i>Terminal
+            </a>
         </nav>
     </aside>
     <div class="app-main">

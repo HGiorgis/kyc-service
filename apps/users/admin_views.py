@@ -1,9 +1,13 @@
+import subprocess
+import re
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.utils import timezone
 from django.db.models import Count, Q, Avg
 from django.db.models.functions import TruncDate
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
 from apps.users.models import User
 from apps.verification.models import KYCSubmission, VerificationLog
 from apps.authentication.models import APIKey, APIKeyLog
@@ -249,3 +253,57 @@ def admin_settings(request):
     }
     
     return render(request, 'admin/settings.html', context)
+
+
+# Blocked patterns for terminal (dangerous commands)
+TERMINAL_BLOCKED = re.compile(
+    r'(\brm\s+-[rf]+\s+/|\b:\(\)\s*\{|>\s*/dev/sd|mkfs\.|dd\s+if=|\bchmod\s+[0-7]+\s+/|/etc/shadow|/etc/passwd\s*$)',
+    re.IGNORECASE
+)
+TERMINAL_TIMEOUT = 30
+
+
+@staff_member_required
+def terminal_view(request):
+    """Admin terminal page - container shell access."""
+    pending_count = KYCSubmission.objects.filter(status='pending').count()
+    return render(request, 'admin/terminal.html', {'pending_count': pending_count})
+
+
+@staff_member_required
+@require_http_methods(['POST'])
+def terminal_run_command(request):
+    """Run a command in the container and return stdout/stderr (JSON)."""
+    cmd = (request.POST.get('command') or request.body.decode('utf-8', errors='ignore')).strip()
+    if not cmd:
+        return JsonResponse({'ok': False, 'stdout': '', 'stderr': 'No command provided.', 'returncode': -1})
+    if TERMINAL_BLOCKED.search(cmd):
+        return JsonResponse({'ok': False, 'stdout': '', 'stderr': 'Command not allowed for security.', 'returncode': -1})
+    try:
+        result = subprocess.run(
+            ['sh', '-c', cmd],
+            capture_output=True,
+            text=True,
+            timeout=TERMINAL_TIMEOUT,
+            cwd='/app',
+        )
+        return JsonResponse({
+            'ok': result.returncode == 0,
+            'stdout': result.stdout or '',
+            'stderr': result.stderr or '',
+            'returncode': result.returncode,
+        })
+    except subprocess.TimeoutExpired:
+        return JsonResponse({
+            'ok': False,
+            'stdout': '',
+            'stderr': f'Command timed out after {TERMINAL_TIMEOUT}s.',
+            'returncode': -1,
+        })
+    except Exception as e:
+        return JsonResponse({
+            'ok': False,
+            'stdout': '',
+            'stderr': str(e),
+            'returncode': -1,
+        })
