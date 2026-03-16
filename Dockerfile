@@ -37,6 +37,10 @@ RUN pip install --no-cache-dir -r requirements-docker.txt
 
 COPY . .
 
+# Run database migrations
+RUN python manage.py migrate --noinput
+
+# Collect static files
 RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
