@@ -23,4 +23,6 @@ whitenoise
 daphne
 channels
 dj_database_url
+django-storages[s3]
+boto3
 requests

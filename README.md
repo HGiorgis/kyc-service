@@ -136,7 +136,9 @@ docker compose up -d --build
    - `ALLOWED_HOSTS` – your Render host, e.g. `your-service.onrender.com`
    - `DATABASE_URL` – if you add a Render Postgres instance, set this and use `dj-database-url` in settings if needed.
 
-5. **Static and media:** WhiteNoise serves static files from `STATIC_ROOT` after `collectstatic`. Media is served by Django from `MEDIA_ROOT`. On Render’s free tier the filesystem is ephemeral, so uploaded files in `media/` are lost on redeploy; for persistent uploads use external storage (e.g. S3).
+5. **Static and media:** WhiteNoise serves static files from `STATIC_ROOT` after `collectstatic`. Media is served by Django from `MEDIA_ROOT`. On Render’s free tier the filesystem is ephemeral, so uploaded files in `media/` are lost on redeploy; **Use Backblaze B2 for production** (see step 6).
+
+6. **Backblaze B2 (production media – KYC documents):** Set these **only in the Render Environment** (never in code or repo): `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_STORAGE_BUCKET_NAME`, `AWS_S3_ENDPOINT_URL` (e.g. `https://s3.eu-central-007.backblazeb2.com`). The app uses a private bucket with signed URLs (1-hour expiry) and server-side encryption. Use a B2 Application Key with minimal scope; rotate keys periodically. To migrate local `media/` to B2: `python manage.py upload_media_to_b2` (use `--dry-run` first).
 
 ---
 

@@ -23,7 +23,8 @@ psycopg2-binary
 # dlib builds from source on Linux (needs cmake + build-essential in Dockerfile)
 # face-recognition depends on dlib
 face-recognition
-dj_database_url
+django-storages[s3]
+boto3
 requests
 
 # Optional: celery/redis if you enable them
