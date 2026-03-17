@@ -228,26 +228,31 @@ class KYCVerifier:
             }
     
     def _generate_summary(self, results):
-        """Generate human-readable summary"""
+        """Generate human-readable summary. Safe when OCR or validation is None (e.g. timeout)."""
         summary = []
-        
-        if results['checks'].get('face_match', {}).get('match'):
+        checks = results.get('checks') or {}
+        face_match = checks.get('face_match') or {}
+        ocr = checks.get('ocr') or {}
+        validation = ocr.get('validation') if isinstance(ocr.get('validation'), dict) else {}
+
+        if face_match.get('match'):
             summary.append("Face match successful")
-        elif results['checks'].get('face_match', {}).get('score', 0) > 0.6:
+        elif (face_match.get('score') or 0) > 0.6:
             summary.append("Face match acceptable")
         else:
             summary.append("Face match failed")
-        
-        if results['checks'].get('ocr', {}).get('validation', {}).get('id_number_match'):
+
+        if validation.get('id_number_match'):
             summary.append("ID number verified")
         else:
             summary.append("ID number mismatch")
-        
-        if results['fraud_report'] and not results['fraud_report']['is_fraudulent']:
+
+        fraud = results.get('fraud_report')
+        if fraud and not fraud.get('is_fraudulent'):
             summary.append("No fraud detected")
-        elif results['fraud_report']:
-            summary.append(f"Fraud risk: {results['fraud_report']['overall_risk_score']:.2f}")
-        
+        elif fraud:
+            summary.append(f"Fraud risk: {fraud.get('overall_risk_score', 0):.2f}")
+
         return summary
     
     def _check_image_quality(self, image_path):

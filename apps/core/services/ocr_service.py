@@ -220,9 +220,16 @@ class OCRService:
             'confidence': 0.0,
         }
 
-        extraction = self.extract_text(image_path)
+        try:
+            extraction = self.extract_text(image_path)
+        except Exception as e:
+            logger.warning("OCR extract_text failed: %s", e)
+            result['error'] = str(e)
+            result['validation'] = {'id_number_match': False, 'name_match': False}
+            return result
         if not extraction.get('success'):
             result['error'] = extraction.get('error', 'OCR failed')
+            result['validation'] = {'id_number_match': False, 'name_match': False}
             return result
 
         text = extraction.get('text', '')
