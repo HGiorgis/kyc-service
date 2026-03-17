@@ -1,10 +1,13 @@
 from django.urls import path
+from django.views.generic import RedirectView
 from django.contrib.admin.views.decorators import staff_member_required
 from . import admin_views
 
 app_name = 'users'
 
 urlpatterns = [
+    # staff_member_required redirects to admin:login when not authenticated; send them to auth login
+    path('login/', RedirectView.as_view(pattern_name='auth:login', permanent=False), name='login'),
     path('dashboard/', staff_member_required(admin_views.admin_dashboard), name='dashboard'),
     path('kyc/', staff_member_required(admin_views.kyc_list), name='kyc-list'),
     path('kyc/<uuid:submission_id>/', staff_member_required(admin_views.kyc_review), name='kyc-review'),

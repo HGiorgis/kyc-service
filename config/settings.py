@@ -191,6 +191,6 @@ REST_FRAMEWORK = {
     'UNAUTHENTICATED_USER': None, 
 }
 
-# Login URLs
-LOGIN_URL = '/auth/login/'
-LOGIN_REDIRECT_URL = '/users/dashboard/'
+# Login URLs (use URL name so admin/staff redirects resolve; name is auth:login)
+LOGIN_URL = 'auth:login'
+LOGIN_REDIRECT_URL = 'user:dashboard'

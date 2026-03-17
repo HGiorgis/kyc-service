@@ -2,13 +2,14 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from apps.users.views import landing_page_view
+from apps.users.views import landing_page_view, login_view
 
 urlpatterns = [
     # Landing page (public)
     path('', landing_page_view, name='landing'),
-    
-    # Authentication URLs (public)
+    # Root 'login' so reverse('login') works for admin/staff redirects (same view as auth:login)
+    path('login/', login_view, name='login'),
+    # Authentication URLs (public) - auth:login is /auth/login/
     path('auth/', include(('apps.users.urls', 'users'), namespace='auth')),
     
     # User Dashboard (requires login) - namespace 'user'
