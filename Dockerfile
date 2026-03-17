@@ -44,5 +44,5 @@ RUN python manage.py migrate --noinput
 RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
-# Migrate, create default admin (admin / admin@kyc.local), then gunicorn
-CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py create_default_admin --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120"]
+# Migrate, create default admin, then daphne (HTTP + WebSocket for interactive terminal)
+CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py create_default_admin --noinput && exec daphne -b 0.0.0.0 -p 8000 config.asgi:application"]

@@ -18,6 +18,7 @@ ALLOWED_HOSTS = ['*']
 
 # Application definition
 INSTALLED_APPS = [
+    'daphne',  # ASGI server (before django)
     # Django built-in apps
     'django.contrib.admin',
     'django.contrib.auth',
@@ -72,6 +73,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
 
 # Database
 DATABASES = {
