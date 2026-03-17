@@ -22,4 +22,5 @@ setuptools==70.3.0
 whitenoise
 daphne
 channels
-dj-database-url
+dj_database_url
+requests
