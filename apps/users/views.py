@@ -12,9 +12,10 @@ from .forms import (
     CustomUserCreationForm, CustomAuthenticationForm, 
     UserProfileForm, ChangePasswordForm
 )
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET
 from apps.authentication.models import APIKey, APIKeyLog
 from apps.verification.models import KYCSubmission, KYCDocument, VerificationLog
-from apps.core.services.verifier import KYCVerifier
 from apps.core.models import SystemSettings
 from datetime import timedelta
 import json
@@ -309,6 +310,7 @@ def test_kyc_view(request):
                 _log_test_page_call(request, api_key, 400, time.time() - start_time)
             else:
                 try:
+                    from apps.api.views.kyc_views import _run_verification_in_background
                     submission = KYCSubmission.objects.create(
                         user_id=user_id,
                         user_email=user_email,
@@ -328,17 +330,17 @@ def test_kyc_view(request):
                         ip_address=request.META.get('REMOTE_ADDR') or None,
                         details={'id_type': id_type, 'source': 'test_page'},
                     )
-                    verifier = KYCVerifier()
-                    result = verifier.verify_submission(submission)
-                    submission.verification_data = result
-                    submission.confidence_score = result.get('overall_confidence', 0)
-                    submission.status = result.get('status', 'flagged')
-                    submission.processed_at = timezone.now()
-                    submission.save()
-                    log_action = {'approved': 'auto_approved', 'rejected': 'auto_rejected', 'flagged': 'flagged'}.get(result['status'], 'flagged')
-                    VerificationLog.objects.create(submission=submission, action=log_action, performed_by='system', details=result)
+                    _run_verification_in_background(submission.id)
                     _log_test_page_call(request, api_key, 200, time.time() - start_time)
-                    messages.success(request, 'Test run completed. See results below.')
+                    # When client expects JSON (AJAX upload), return immediately so they see "in process" as soon as upload finishes
+                    if request.accepts('application/json') or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return JsonResponse({
+                            'submission_id': str(submission.id),
+                            'in_process': True,
+                            'message': 'Your documents have been received and are being verified. It may take a few minutes. Use "Check status" below when ready.',
+                        })
+                    messages.success(request, 'Documents received and in process. Use "Check status" below when ready.')
+                    return redirect(reverse('user:test') + f'?submission_id={submission.id}')
                 except MemoryError:
                     messages.error(request, 'Server ran out of memory. Please use smaller images (under 2MB each) and try again.')
                     result = {'status': 'error', 'flags': ['Out of memory'], 'overall_confidence': 0}
@@ -348,8 +350,31 @@ def test_kyc_view(request):
                     result = {'status': 'error', 'flags': [str(e)], 'overall_confidence': 0}
                     _log_test_page_call(request, api_key, 500, time.time() - start_time)
 
+    submission_id = request.GET.get('submission_id')
     context = {
         'api_key': api_key,
         'test_result': result,
+        'submission_id': submission_id,
+        'in_process': bool(submission_id and result is None),
     }
     return render(request, 'user/test.html', context)
+
+
+@login_required
+@require_GET
+def test_kyc_status_view(request, submission_id):
+    """Return JSON status for a submission (only if submitted by current user). For test page polling."""
+    try:
+        submission = KYCSubmission.objects.get(id=submission_id, submitted_by=request.user)
+    except KYCSubmission.DoesNotExist:
+        return JsonResponse({'error': 'Not found', 'status': 'not_found'}, status=404)
+    payload = {
+        'submission_id': str(submission.id),
+        'status': submission.status,
+        'confidence': submission.confidence_score,
+        'processed_at': submission.processed_at.isoformat() if submission.processed_at else None,
+        'rejection_reason': submission.rejection_reason,
+    }
+    if submission.status not in ('pending', 'processing') and submission.verification_data:
+        payload['verification_data'] = submission.verification_data
+    return JsonResponse(payload)

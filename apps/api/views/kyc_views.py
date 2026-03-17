@@ -1,5 +1,7 @@
 # apps/api/views/kyc_views.py
 import time
+import threading
+import logging
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -12,6 +14,41 @@ from apps.verification.models import KYCSubmission, KYCDocument, VerificationLog
 from apps.authentication.models import APIKeyLog
 from apps.core.models import SystemSettings
 from apps.core.services.verifier import KYCVerifier
+
+logger = logging.getLogger(__name__)
+
+
+def _run_verification_in_background(submission_id):
+    """Run verification for a submission in a background thread and update the submission."""
+    def run():
+        try:
+            submission = KYCSubmission.objects.get(id=submission_id)
+        except KYCSubmission.DoesNotExist:
+            return
+        try:
+            verifier = KYCVerifier()
+            result = verifier.verify_submission(submission)
+            submission.verification_data = result
+            submission.confidence_score = result.get('overall_confidence', 0)
+            submission.status = result.get('status', 'flagged')
+            submission.processed_at = timezone.now()
+            submission.save()
+            log_action = {'approved': 'auto_approved', 'rejected': 'auto_rejected', 'flagged': 'flagged'}.get(result['status'], 'flagged')
+            VerificationLog.objects.create(
+                submission=submission, action=log_action, performed_by='system', details=result
+            )
+        except Exception as e:
+            logger.exception('Background verification failed for submission %s: %s', submission_id, e)
+            try:
+                submission = KYCSubmission.objects.get(id=submission_id)
+                submission.status = 'error'
+                submission.verification_data = {'error': str(e), 'status': 'error'}
+                submission.processed_at = timezone.now()
+                submission.save()
+            except Exception:
+                pass
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
 
 
 def _log_api_call(request, api_key, endpoint, method, status_code, response_time_sec):
@@ -104,18 +141,35 @@ class KYCSubmitView(APIView):
                 _log_api_call(request, api_key, endpoint, 'POST', 400, time.time() - start_time)
                 return resp
 
-            existing = KYCSubmission.objects.filter(
-                user_id=user_id,
-                status__in=['pending', 'processing', 'flagged']
-            ).first()
+            # Only allow new submission when user has none or previous is rejected/error
+            existing = KYCSubmission.objects.filter(user_id=user_id).order_by('-created_at').first()
             if existing:
-                resp = Response({
-                    'error': 'User already has pending KYC submission',
-                    'submission_id': str(existing.id),
-                    'status': existing.status
-                }, status=status.HTTP_400_BAD_REQUEST)
-                _log_api_call(request, api_key, endpoint, 'POST', 400, time.time() - start_time)
-                return resp
+                s = existing.status
+                if s in ('pending', 'processing'):
+                    resp = Response({
+                        'error': 'You have a KYC submission in process. Please wait and check status.',
+                        'submission_id': str(existing.id),
+                        'status': s,
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                    _log_api_call(request, api_key, endpoint, 'POST', 400, time.time() - start_time)
+                    return resp
+                if s == 'approved':
+                    resp = Response({
+                        'error': 'Your KYC is already approved.',
+                        'submission_id': str(existing.id),
+                        'status': s,
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                    _log_api_call(request, api_key, endpoint, 'POST', 400, time.time() - start_time)
+                    return resp
+                if s == 'flagged':
+                    resp = Response({
+                        'error': 'Your documents are under review. You cannot submit again until reviewed.',
+                        'submission_id': str(existing.id),
+                        'status': s,
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                    _log_api_call(request, api_key, endpoint, 'POST', 400, time.time() - start_time)
+                    return resp
+                # rejected or error: allow new submission
 
             submission = KYCSubmission.objects.create(
                 user_id=user_id,
@@ -141,34 +195,14 @@ class KYCSubmitView(APIView):
                 details={'id_type': id_type, 'api_key': api_key.key_preview}
             )
 
-            verifier = KYCVerifier()
-            result = verifier.verify_submission(submission)
-            submission.verification_data = result
-            submission.confidence_score = result.get('overall_confidence', 0)
-            if result['status'] == 'approved':
-                submission.status = 'approved'
-            elif result['status'] == 'rejected':
-                submission.status = 'rejected'
-            else:
-                submission.status = 'flagged'
-            submission.processed_at = timezone.now()
-            submission.save()
-
-            log_action = {'approved': 'auto_approved', 'rejected': 'auto_rejected', 'flagged': 'flagged'}.get(result['status'], 'flagged')
-            VerificationLog.objects.create(
-                submission=submission,
-                action=log_action,
-                performed_by='system',
-                details=result
-            )
+            # Run verification in background; return immediately
+            _run_verification_in_background(submission.id)
 
             _log_api_call(request, api_key, endpoint, 'POST', 201, time.time() - start_time)
             return Response({
                 'submission_id': str(submission.id),
-                'status': submission.status,
-                'confidence': submission.confidence_score,
-                'flags': result.get('flags', []),
-                'message': f'KYC verification {submission.status}'
+                'status': 'processing',
+                'message': 'Data received and in process. It may take a few minutes. Use the submission_id to check status.',
             }, status=status.HTTP_201_CREATED)
 
         except MemoryError:
@@ -236,6 +270,56 @@ class KYCStatusView(APIView):
                 'rejection_reason': submission.rejection_reason
             })
 
+        except Exception as e:
+            _log_api_call(request, api_key, endpoint, 'GET', 500, time.time() - start_time)
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class KYCStatusBySubmissionIdView(APIView):
+    """Get KYC status by submission_id (for polling after async submit)."""
+    authentication_classes = [APIKeyAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, submission_id):
+        start_time = time.time()
+        user = request.user
+        api_key = request.auth
+        endpoint = (request.path or '').rstrip('/')
+
+        try:
+            ok, msg = user.check_rate_limit()
+            if not ok:
+                _log_api_call(request, api_key, endpoint, 'GET', 429, time.time() - start_time)
+                return Response({
+                    'error': msg,
+                    'limit_reached': True,
+                }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+            api_key.record_usage()
+
+            try:
+                submission = KYCSubmission.objects.get(id=submission_id)
+            except KYCSubmission.DoesNotExist:
+                _log_api_call(request, api_key, endpoint, 'GET', 404, time.time() - start_time)
+                return Response({
+                    'submission_id': str(submission_id),
+                    'status': 'not_found',
+                    'message': 'Submission not found',
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            payload = {
+                'submission_id': str(submission.id),
+                'user_id': submission.user_id,
+                'status': submission.status,
+                'confidence': submission.confidence_score,
+                'submitted_at': submission.submitted_at,
+                'processed_at': submission.processed_at,
+                'rejection_reason': submission.rejection_reason,
+            }
+            if submission.status not in ('pending', 'processing') and submission.verification_data:
+                payload['verification_data'] = submission.verification_data
+
+            _log_api_call(request, api_key, endpoint, 'GET', 200, time.time() - start_time)
+            return Response(payload)
         except Exception as e:
             _log_api_call(request, api_key, endpoint, 'GET', 500, time.time() - start_time)
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

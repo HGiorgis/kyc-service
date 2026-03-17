@@ -261,7 +261,7 @@
                     <i class="fas fa-cloud-upload-alt me-2" style="color: #0ea5e9;"></i>Upload test data
                 </div>
                 <div class="card-body">
-                    <form method="post" enctype="multipart/form-data" id="testForm">
+                    <form method="post" enctype="multipart/form-data" id="testForm" data-status-url-template="{% url 'user:test-status' submission_id='00000000-0000-0000-0000-000000000000' %}">
                         {% csrf_token %}
                         <!-- Applicant section -->
                         <div class="test-fieldset mb-4">
@@ -343,6 +343,16 @@
                             </div>
                         </div>
 
+                        <!-- Upload progress (shown during AJAX submit) -->
+                        <div id="uploadProgressWrap" class="d-none mb-3">
+                            <div class="d-flex justify-content-between small text-muted mb-1">
+                                <span id="uploadProgressLabel">Uploading files…</span>
+                                <span id="uploadProgressPct">0%</span>
+                            </div>
+                            <div class="progress" style="height: 8px; border-radius: 8px;">
+                                <div id="uploadProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
                         <button type="submit" class="btn btn-primary btn-lg w-100" id="submitBtn">
                             <i class="fas fa-play me-2"></i>Run verification test
                         </button>
@@ -376,9 +386,27 @@
                 </div>
             </div>
 
-            <!-- RESULT CARD (dynamic) -->
+            <!-- IN PROCESS: show when submission is processing -->
+            {% if in_process and submission_id %}
+            <div class="card test-result-card mb-3" id="inProcessCard">
+                <div class="card-header bg-light">
+                    <span><i class="fas fa-hourglass-half me-2 text-warning"></i>In process</span>
+                </div>
+                <div class="card-body">
+                    <p class="mb-3">Your documents have been received and are being verified. It may take a few minutes.</p>
+                    <p class="small text-muted mb-3">Submission ID: <code id="submissionIdDisplay">{{ submission_id }}</code></p>
+                    <button type="button" class="btn btn-primary" id="checkStatusBtn" data-status-url="{% url 'user:test-status' submission_id=submission_id %}">
+                        <i class="fas fa-sync-alt me-2"></i>Check status
+                    </button>
+                    <div id="statusCheckMessage" class="mt-3 small text-muted d-none"></div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- RESULT CARD (dynamic: server-rendered or JS-filled) -->
+            <div id="resultContainer">
             {% if test_result %}
-            <div class="test-result-card">
+            <div class="test-result-card" id="resultCard">
                 <div class="card-header">
                     <span><i class="fas fa-clipboard-check me-2" style="color: #0ea5e9;"></i>Verification result</span>
                     <span class="result-badge {% if test_result.status == 'approved' %}approved{% elif test_result.status == 'rejected' or test_result.status == 'error' %}rejected{% else %}pending{% endif %}">
@@ -399,7 +427,6 @@
                     </div>
                     {% endif %}
 
-                    <!-- Detailed checks -->
                     {% if test_result.checks %}
                     <div style="margin-bottom: 20px;">
                         {% if test_result.checks.face_match and test_result.checks.face_match.score is not None %}
@@ -423,7 +450,6 @@
                     </div>
                     {% endif %}
 
-                    <!-- Flags / issues -->
                     {% if test_result.flags %}
                     <div class="flag-list">
                         {% for flag in test_result.flags %}
@@ -432,7 +458,6 @@
                     </div>
                     {% endif %}
 
-                    <!-- Summary if exists -->
                     {% if test_result.summary %}
                     <div class="summary-box">
                         <strong class="small text-primary">Summary</strong>
@@ -445,13 +470,14 @@
                     {% endif %}
                 </div>
             </div>
-            {% else %}
-            <div class="placeholder-card">
+            {% elif not in_process %}
+            <div class="placeholder-card" id="placeholderCard">
                 <i class="fas fa-flask"></i>
                 <h5 class="mb-2">No test run yet</h5>
                 <p class="small">Upload three images and run verification.<br>Result will appear here.</p>
             </div>
             {% endif %}
+            </div>
         </div>
     </div>
 </div>
@@ -500,19 +526,142 @@
         setupUploadPreview('id_back_input', 'upload-back-area', 'back-preview', 'back-filename');
         setupUploadPreview('selfie_input', 'upload-selfie-area', 'selfie-preview', 'selfie-filename');
 
-        // Optional: disable submit if any file missing (basic)
+        // AJAX submit with upload progress; response as soon as upload finishes (server then processes in background)
         const form = document.getElementById('testForm');
+        const progressWrap = document.getElementById('uploadProgressWrap');
+        const progressBar = document.getElementById('uploadProgressBar');
+        const progressLabel = document.getElementById('uploadProgressLabel');
+        const submitBtn = document.getElementById('submitBtn');
+        const resultContainer = document.getElementById('resultContainer');
+
         if (form) {
             form.addEventListener('submit', function(e) {
+                e.preventDefault();
                 const front = document.getElementById('id_front_input').files.length;
                 const back = document.getElementById('id_back_input').files.length;
                 const selfie = document.getElementById('selfie_input').files.length;
                 if (!front || !back || !selfie) {
-                    e.preventDefault();
                     alert('Please upload ID front, ID back, and selfie.');
+                    return;
                 }
+
+                var formData = new FormData(form);
+                var xhr = new XMLHttpRequest();
+                var csrf = form.querySelector('[name=csrfmiddlewaretoken]');
+                if (csrf) formData.set('csrfmiddlewaretoken', csrf.value);
+
+                progressWrap.classList.remove('d-none');
+                progressBar.style.width = '0%';
+                progressLabel.textContent = 'Uploading files…';
+                var pctEl = document.getElementById('uploadProgressPct');
+                if (pctEl) pctEl.textContent = '0%';
+                submitBtn.disabled = true;
+
+                xhr.upload.addEventListener('progress', function(ev) {
+                    if (ev.lengthComputable) {
+                        var pct = Math.round((ev.loaded / ev.total) * 100);
+                        progressBar.style.width = pct + '%';
+                        progressBar.setAttribute('aria-valuenow', pct);
+                        if (pctEl) pctEl.textContent = pct + '%';
+                    }
+                });
+
+                xhr.addEventListener('load', function() {
+                    progressWrap.classList.add('d-none');
+                    submitBtn.disabled = false;
+                    var ct = xhr.getResponseHeader('Content-Type') || '';
+                    if (ct.indexOf('application/json') !== -1) {
+                        try {
+                            var data = JSON.parse(xhr.responseText);
+                            if (data.submission_id && data.in_process) {
+                                progressLabel.textContent = 'Upload complete. Processing started.';
+                                showInProcessCard(data.submission_id, data.message);
+                                return;
+                            }
+                            if (data.error) {
+                                alert(data.message || data.error || 'Submission failed.');
+                                return;
+                            }
+                        } catch (err) {}
+                    }
+                    if (xhr.status >= 400) {
+                        alert('Upload failed. Please try again.');
+                        return;
+                    }
+                    // Non-JSON response (e.g. validation error page): reload so user sees messages
+                    window.location.reload();
+                });
+
+                xhr.addEventListener('error', function() {
+                    progressWrap.classList.add('d-none');
+                    submitBtn.disabled = false;
+                    alert('Upload failed. Please check your connection and try again.');
+                });
+
+                xhr.open('POST', form.action || window.location.pathname);
+                xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                xhr.setRequestHeader('Accept', 'application/json');
+                xhr.send(formData);
             });
         }
+
+        function showInProcessCard(submissionId, message) {
+            var container = document.getElementById('resultContainer');
+            var form = document.getElementById('testForm');
+            var template = form && form.getAttribute('data-status-url-template');
+            var statusUrl = template ? template.replace('00000000-0000-0000-0000-000000000000', submissionId) : (window.location.pathname.replace(/\/$/, '') + '/status/' + submissionId + '/');
+            var html = '<div class="card test-result-card mb-3" id="inProcessCard"><div class="card-header bg-light"><span><i class="fas fa-hourglass-half me-2 text-warning"></i>In process</span></div><div class="card-body"><p class="mb-3">' + (message || 'Your documents have been received and are being verified. It may take a few minutes.') + '</p><p class="small text-muted mb-3">Submission ID: <code id="submissionIdDisplay">' + submissionId + '</code></p><button type="button" class="btn btn-primary" id="checkStatusBtn" data-status-url="' + statusUrl + '"><i class="fas fa-sync-alt me-2"></i>Check status</button><div id="statusCheckMessage" class="mt-3 small text-muted d-none"></div></div></div>';
+            if (container) container.innerHTML = html;
+            var btn = document.getElementById('checkStatusBtn');
+            if (btn) bindCheckStatusButton(btn);
+        }
+
+        function bindCheckStatusButton(checkStatusBtn) {
+            var statusUrl = checkStatusBtn.getAttribute('data-status-url');
+            if (!statusUrl) return;
+            checkStatusBtn.addEventListener('click', function() {
+                var msgEl = document.getElementById('statusCheckMessage');
+                if (msgEl) { msgEl.classList.remove('d-none'); msgEl.textContent = 'Checking...'; }
+                checkStatusBtn.disabled = true;
+                fetch(statusUrl, { headers: { 'Accept': 'application/json' } })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (msgEl) msgEl.textContent = '';
+                        if (data.status === 'processing' || data.status === 'pending') {
+                            if (msgEl) { msgEl.textContent = 'Still processing. Try again in a moment.'; msgEl.classList.remove('d-none'); }
+                            checkStatusBtn.disabled = false;
+                            return;
+                        }
+                        var container = document.getElementById('resultContainer');
+                        var inProcessCard = document.getElementById('inProcessCard');
+                        if (inProcessCard) inProcessCard.remove();
+                        var v = data.verification_data || {};
+                        var status = data.status || v.status || 'unknown';
+                        var confidence = data.confidence != null ? data.confidence : (v.overall_confidence != null ? v.overall_confidence : null);
+                        var checks = v.checks || {};
+                        var flags = v.flags || [];
+                        var summary = v.summary || [];
+                        var resultHtml = '<div class="test-result-card"><div class="card-header"><span><i class="fas fa-clipboard-check me-2" style="color: #0ea5e9;"></i>Verification result</span><span class="result-badge ' + (status === 'approved' ? 'approved' : (status === 'rejected' || status === 'error' ? 'rejected' : 'pending')) + '">' + (status === 'approved' ? '<i class="fas fa-check-circle me-1"></i>' : (status === 'rejected' ? '<i class="fas fa-times-circle me-1"></i>' : '')) + status.toUpperCase() + '</span></div><div class="test-result-body">';
+                        if (confidence != null) resultHtml += '<div class="confidence-meter"><div class="label-row"><span>Overall confidence</span><strong>' + Number(confidence).toFixed(2) + '</strong></div><div class="progress thin-progress"><div class="progress-bar animated-bar ' + (confidence >= 0.7 ? 'bg-success' : (confidence >= 0.4 ? 'bg-warning' : 'bg-danger')) + '" style="width: ' + (confidence * 100) + '%;"></div></div></div>';
+                        if (checks.face_match && checks.face_match.score != null) resultHtml += '<div class="check-item"><span class="check-label"><i class="fas fa-user-check"></i> Face similarity</span><span class="check-score ' + (checks.face_match.score >= 0.6 ? 'text-success' : 'text-danger') + '">' + Number(checks.face_match.score).toFixed(2) + '</span></div>';
+                        if (checks.ocr && checks.ocr.confidence != null) resultHtml += '<div class="check-item"><span class="check-label"><i class="fas fa-file-alt"></i> OCR confidence</span><span class="check-score">' + Number(checks.ocr.confidence).toFixed(2) + '</span></div>';
+                        if (checks.image_quality && checks.image_quality.score != null) resultHtml += '<div class="check-item"><span class="check-label"><i class="fas fa-image"></i> Image quality</span><span class="check-score">' + Number(checks.image_quality.score).toFixed(2) + '</span></div>';
+                        if (flags.length) { resultHtml += '<div class="flag-list">'; flags.forEach(function(f) { resultHtml += '<div class="flag-item"><i class="fas fa-exclamation-triangle" style="color: #eab308;"></i> ' + String(f).replace(/</g, '&lt;') + '</div>'; }); resultHtml += '</div>'; }
+                        if (summary.length) { resultHtml += '<div class="summary-box"><strong class="small text-primary">Summary</strong><ul>'; summary.forEach(function(s) { resultHtml += '<li class="small">' + String(s).replace(/</g, '&lt;') + '</li>'; }); resultHtml += '</ul></div>'; }
+                        resultHtml += '</div></div>';
+                        container.innerHTML = resultHtml;
+                        checkStatusBtn.disabled = false;
+                    })
+                    .catch(function() {
+                        if (msgEl) { msgEl.textContent = 'Could not load status. Try again.'; msgEl.classList.remove('d-none'); }
+                        checkStatusBtn.disabled = false;
+                    });
+            });
+        }
+
+        // Check status (when in process) – for server-rendered in-process card
+        var checkStatusBtn = document.getElementById('checkStatusBtn');
+        if (checkStatusBtn) bindCheckStatusButton(checkStatusBtn);
     })();
 </script>
 {% endblock %}
