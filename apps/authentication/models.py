@@ -17,7 +17,7 @@ class APIKey(models.Model):
     
     name = models.CharField(max_length=100, help_text="Name for this API key")
     key = models.CharField(max_length=64, unique=True, editable=False)
-    key_preview = models.CharField(max_length=8, editable=False)
+    key_preview = models.CharField(max_length=16, editable=False)
     key_hash = models.CharField(max_length=128, editable=False)  # Store hash for verification
     
     is_active = models.BooleanField(default=True)

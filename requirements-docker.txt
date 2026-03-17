@@ -5,6 +5,7 @@ wheel
 Django>=4.2
 djangorestframework
 python-dotenv
+dj-database-url
 Pillow
 django-cors-headers
 djangorestframework-api-key
@@ -22,6 +23,8 @@ psycopg2-binary
 # dlib builds from source on Linux (needs cmake + build-essential in Dockerfile)
 # face-recognition depends on dlib
 face-recognition
+dj_database_url
+requests
 
 # Optional: celery/redis if you enable them
 # celery

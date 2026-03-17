@@ -47,7 +47,13 @@ pip install -r requirements.txt
 
 ### 3. Environment variables
 
-Create a `.env` file in the project root (optional; defaults work for local dev):
+Create a `.env` file in the project root (optional; defaults work for local dev). To use **Neon PostgreSQL** (or any Postgres) so data and the default admin user persist (e.g. in Docker or on Render), set:
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DBNAME?sslmode=require
+```
+
+Example (Neon): copy the connection string from the Neon dashboard and add `?sslmode=require` if not already present. The app will run migrations and create the default admin in that database.
 
 ```env
 DEBUG=True

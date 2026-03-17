@@ -18,6 +18,7 @@ django.setup()
 
 from django.utils import timezone
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from apps.authentication.models import APIKey, APIKeyLog
 from apps.verification.models import KYCSubmission, KYCDocument, VerificationLog
 from apps.core.models import SystemSettings
@@ -85,6 +86,10 @@ def main():
         # continue to seed after clear if more args
 
     log("Seeding data...")
+    # Ensure default admin exists (same as create_default_admin)
+    if not User.objects.filter(is_superuser=True).exists():
+        call_command("create_default_admin", "--noinput")
+        log("Created default admin (admin / admin@kyc.local).")
     settings_obj = SystemSettings.get_settings()
 
     # ----- 1. Create 10 users: 5 with API key, 5 without -----

@@ -2,8 +2,8 @@
 # Build includes: Tesseract (Linux), dlib/face_recognition, setuptools 70.x
 #
 # Usage:
-#   docker compose up -d --build    # build and run (SQLite by default)
-#   docker compose up -d web        # run only web (no db/redis)
+#   docker compose up -d --build    # build and run
+#   Set DATABASE_URL in .env for Neon Postgres so data and default admin persist.
 #
 # Optional: use host network (uncomment under web)
 #   network_mode: host
@@ -28,15 +28,13 @@ services:
       - "8000:8000"
     # Optional: host mode (Linux) - uncomment to use host network, then remove "ports" above
     # network_mode: host
+    env_file:
+      - .env
     environment:
       - DEBUG=1
       - SECRET_KEY=your-secret-key-change-in-production
       - ALLOWED_HOSTS=*
-      # Database: default SQLite. For Postgres uncomment and use db service:
-      # - DATABASE_URL=postgres://eras_user:eras_pass@db:5432/eras_db
-    # Uncomment to use Postgres:
-    # depends_on:
-    #   - db
+      # DATABASE_URL from .env (e.g. Neon) is loaded by env_file. If set, migrate + create_default_admin use it.
     restart: unless-stopped
 
   # Optional: Postgres (enable if you switch settings to use DATABASE_URL)
