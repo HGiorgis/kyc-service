@@ -119,7 +119,7 @@ class FraudDetector:
         for doc in documents:
             # Calculate image hash
             try:
-                with open(doc.file.path, 'rb') as f:
+                with doc.file.open('rb') as f:
                     file_hash = hashlib.md5(f.read()).hexdigest()
                 
                 # Check if same image used in other submissions

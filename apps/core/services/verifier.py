@@ -3,6 +3,7 @@ import numpy as np
 from PIL import Image
 import os
 import re
+import tempfile
 from datetime import datetime
 from .face_matcher import FaceMatcher
 from .ocr_service import OCRService
@@ -10,6 +11,48 @@ from .fraud_detector import FraudDetector
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _get_local_path(file_field):
+    """
+    Return (local_path, cleanup_callable) for a FileField.
+    For local storage: returns file.path and None. For S3/B2: downloads to a temp file and returns path + cleanup.
+    """
+    if not file_field or not file_field.name:
+        return None, None
+    storage = file_field.storage
+    try:
+        path = storage.path(file_field.name)
+        if os.path.exists(path):
+            return path, None
+        return None, None
+    except (NotImplementedError, AttributeError):
+        pass
+    # Remote storage (S3/B2): download to temp file
+    suffix = os.path.splitext(file_field.name)[1] or '.bin'
+    fd, path = tempfile.mkstemp(suffix=suffix)
+    try:
+        with storage.open(file_field.name, 'rb') as src:
+            with os.fdopen(fd, 'wb') as dst:
+                dst.write(src.read())
+        def cleanup():
+            try:
+                if path and os.path.exists(path):
+                    os.unlink(path)
+            except OSError:
+                pass
+        return path, cleanup
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        if os.path.exists(path):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        raise
 
 class KYCVerifier:
     """Main KYC verification service with REAL features"""
@@ -59,54 +102,58 @@ class KYCVerifier:
                 results['status'] = 'rejected'
                 return results
 
-            if id_front and os.path.exists(id_front.file.path):
-                quality_result = self._check_image_quality(id_front.file.path)
-                results['checks']['image_quality'] = quality_result
-                if quality_result['score'] < 0.5:
-                    results['flags'].append('Poor image quality')
+            # Resolve local paths (for S3/B2 we download to temp files)
+            id_front_path, id_front_cleanup = _get_local_path(id_front.file) if id_front and id_front.file else (None, None)
+            selfie_path, selfie_cleanup = _get_local_path(selfie.file) if selfie and selfie.file else (None, None)
+            try:
+                if id_front_path:
+                    quality_result = self._check_image_quality(id_front_path)
+                    results['checks']['image_quality'] = quality_result
+                    if quality_result['score'] < 0.5:
+                        results['flags'].append('Poor image quality')
 
-            if selfie and os.path.exists(selfie.file.path):
-                face_quality = self.face_matcher.extract_face_quality(selfie.file.path)
-                results['checks']['face_quality'] = face_quality
-                if not face_quality['face_present']:
-                    results['flags'].append('No face detected in selfie')
-                elif face_quality.get('face_count', 0) > 1:
-                    results['flags'].append('Multiple faces detected in selfie')
+                if selfie_path:
+                    face_quality = self.face_matcher.extract_face_quality(selfie_path)
+                    results['checks']['face_quality'] = face_quality
+                    if not face_quality['face_present']:
+                        results['flags'].append('No face detected in selfie')
+                    elif face_quality.get('face_count', 0) > 1:
+                        results['flags'].append('Multiple faces detected in selfie')
 
-            if (id_front and selfie and
-                os.path.exists(id_front.file.path) and
-                os.path.exists(selfie.file.path)):
-                face_match = self.face_matcher.compare_faces(
-                    id_front.file.path,
-                    selfie.file.path
-                )
-                results['checks']['face_match'] = face_match
-                score = face_match.get('score')
-                if not face_match.get('face_detected', False):
-                    results['flags'].append('Face detection failed')
-                elif score is not None and score < 0.6:
-                    results['flags'].append("Face match score too low: %s" % score)
-                elif score is not None and score > 0.8:
-                    results['checks']['face_match']['excellent'] = True
+                if id_front_path and selfie_path:
+                    face_match = self.face_matcher.compare_faces(id_front_path, selfie_path)
+                    results['checks']['face_match'] = face_match
+                    score = face_match.get('score')
+                    if not face_match.get('face_detected', False):
+                        results['flags'].append('Face detection failed')
+                    elif score is not None and score < 0.6:
+                        results['flags'].append("Face match score too low: %s" % score)
+                    elif score is not None and score > 0.8:
+                        results['checks']['face_match']['excellent'] = True
 
-            if id_front and os.path.exists(id_front.file.path):
-                ocr_result = self.ocr_service.process_id_document(
-                    id_front.file.path,
-                    id_type=submission.id_type,
-                    user_data={
-                        'full_name': submission.user_full_name,
-                        'id_number': submission.id_number
-                    }
-                )
-                results['checks']['ocr'] = ocr_result
-                if ocr_result.get('confidence', 0) < 0.5:
-                    results['flags'].append('OCR confidence too low')
-                if ocr_result.get('validation'):
-                    validation = ocr_result['validation']
-                    if not validation.get('id_number_match'):
-                        results['flags'].append('ID number mismatch')
-                    if not validation.get('name_match'):
-                        results['flags'].append('Name mismatch')
+                if id_front_path:
+                    ocr_result = self.ocr_service.process_id_document(
+                        id_front_path,
+                        id_type=submission.id_type,
+                        user_data={
+                            'full_name': submission.user_full_name,
+                            'id_number': submission.id_number
+                        }
+                    )
+                    results['checks']['ocr'] = ocr_result
+                    if ocr_result.get('confidence', 0) < 0.5:
+                        results['flags'].append('OCR confidence too low')
+                    if ocr_result.get('validation'):
+                        validation = ocr_result['validation']
+                        if not validation.get('id_number_match'):
+                            results['flags'].append('ID number mismatch')
+                        if not validation.get('name_match'):
+                            results['flags'].append('Name mismatch')
+            finally:
+                if id_front_cleanup:
+                    id_front_cleanup()
+                if selfie_cleanup:
+                    selfie_cleanup()
 
             id_valid = self._validate_id_number(submission.id_type, submission.id_number)
             results['checks']['id_format'] = {'valid': id_valid}
